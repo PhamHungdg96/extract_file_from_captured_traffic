@@ -276,12 +276,16 @@ class TCPStream:
     def organize_streams(self):
         data = {}
         seq_nos = {}
+        ipl={}
         for pkt in self.get_order_pkts():
             tcpp = pkt[TCP]
             seq = tcpp.seq
             sport = tcpp.sport
             dport = tcpp.dport
-            keys='%s=>%s'%(sport,dport)
+            s_ip=pkt.src
+            d_ip=pkt.dst
+
+            keys='%s:%s=>%s:%s'%(s_ip,sport,d_ip,dport)
             if not keys in data:
                 data[keys] = []
                 seq_nos[keys] = []
@@ -325,7 +329,7 @@ class TCPStream:
                 _header = stream_data[:stream_data.index(b"\r\n\r\n")+2]
                 http_header_parsed = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", _header.decode("utf8")))
                 if "Content-Type" in http_header_parsed.keys():
-                    _content_form=stream_data[stream_data.index(b"\r\n\r\n")+2:]
+                    _content_form=stream_data[stream_data.index(b"\r\n\r\n")+4:]
                     if "Content-Encoding" in http_header_parsed.keys():
                         _content_form = self.decompress_form(_content_form,\
                                         http_header_parsed["Content-Encoding"])
@@ -334,8 +338,8 @@ class TCPStream:
                         boundary=''
                         if "boundary" in http_header_parsed["Content-Type"]:
                             boundary = http_header_parsed["Content-Type"].split('boundary=')[1]
-                            boundary=('\r\n--%s--\r\n'%boundary).encode()
-                        self.extract_payload_form(boundary,_content_form,output_path)
+                            # boundary=('\r\n--%s--\r\n'%boundary).encode()
+                        self.extract_payload_form(boundary,_content_form,output_path, _key)
                     else: print('not exist file in flow %s'%_key)
                             
     def decompress_form(self,payload,type_compress):
@@ -346,21 +350,38 @@ class TCPStream:
         else:
             return payload
 
-    def extract_payload_form(self,boundary, _content_form, output_path):
+    def extract_payload_form(self,boundary, _content_form, output_path,_key):
         filename=''
-        header_form=_content_form[:_content_form.index(b"\r\n\r\n")+2]
-        if header_form is None:
-            print('not in form'); return
-        header_form_parsed = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", header_form.decode("utf8")))
-        if 'Content-Disposition' in header_form_parsed.keys() and \
-            'filename' in header_form_parsed['Content-Disposition']:
-            filename=header_form_parsed['Content-Disposition'].split('filename=')[1].strip('"')
+        boundary_first = ('--%s\r\n'%boundary).encode()
+        boundary_split= ('\r\n--%s\r\n'%boundary).encode()
+        boundary_last = ('\r\n--%s--\r\n'%boundary).encode()
+
+        #split multi-formdata
+        list_content_form=list()
         try:
-            payload_form=_content_form[_content_form.index(b"\r\n\r\n")+4:_content_form.index(boundary)]
-            file_path = output_path + "/" + filename
-            fd = open(file_path, "wb")
-            fd.write(payload_form)
-            fd.close()
-            print('the file is written in %s'%file_path)
+            list_content_form.extend(_content_form.split(boundary_split))
         except:
-            print('failed in process to write file')
+            list_content_form.append(_content_form)
+            print('this flow consist only form')
+        for it in range(0,len(list_content_form)):
+            _content_=list_content_form[it]
+            header_form=_content_[:_content_.index(b"\r\n\r\n")+2]
+            if header_form is None:
+                print('not in form'); return
+            header_form_parsed = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", header_form.decode("utf8")))
+            if 'Content-Disposition' in header_form_parsed.keys() and \
+                'filename' in header_form_parsed['Content-Disposition']:
+                filename=header_form_parsed['Content-Disposition'].split('filename=')[1].strip('"')
+                try:
+                    if it<len(list_content_form)-1:
+                        payload_form=_content_[_content_.index(b"\r\n\r\n")+4:]
+                    else:
+                        payload_form=_content_[_content_.index(b"\r\n\r\n")+4:_content_.index(boundary_last)]
+                    print('Having %s byte of file %s was transmitted from %s to %s'%(len(payload_form),filename,_key.split('=>')[0],_key.split('=>')[1]))
+                    file_path = output_path + "/" + filename
+                    fd = open(file_path, "wb")
+                    fd.write(payload_form)
+                    fd.close()
+                    print('the file is written in %s'%file_path)
+                except:
+                    print('failed in process to write file')
