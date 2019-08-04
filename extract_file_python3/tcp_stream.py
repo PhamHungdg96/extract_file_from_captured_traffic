@@ -4,6 +4,7 @@ import scapy
 from random import randint
 from tcp_state import TCPStateMachine
 import zlib
+from datetime import datetime
 
 from threading import *
 
@@ -282,8 +283,8 @@ class TCPStream:
             seq = tcpp.seq
             sport = tcpp.sport
             dport = tcpp.dport
-            s_ip=pkt.src
-            d_ip=pkt.dst
+            s_ip=pkt[IP].src
+            d_ip=pkt[IP].dst
 
             keys='%s:%s=>%s:%s'%(s_ip,sport,d_ip,dport)
             if not keys in data:
@@ -340,7 +341,8 @@ class TCPStream:
                             boundary = http_header_parsed["Content-Type"].split('boundary=')[1]
                             # boundary=('\r\n--%s--\r\n'%boundary).encode()
                         self.extract_payload_form(boundary,_content_form,output_path, _key)
-                    else: print('not exist file in flow %s'%_key)
+                    else: print('Not exist file in flow %s'%_key)
+                else: print('Not exist file in flow %s'%_key)
                             
     def decompress_form(self,payload,type_compress):
         if type_compress == "gzip":
@@ -365,7 +367,7 @@ class TCPStream:
             print('this flow consist only form')
         for it in range(0,len(list_content_form)):
             _content_=list_content_form[it]
-            header_form=_content_[:_content_.index(b"\r\n\r\n")+2]
+            header_form=_content_[:_content_.index(b"\r\n\r\n")+4]
             if header_form is None:
                 print('not in form'); return
             header_form_parsed = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", header_form.decode("utf8")))
@@ -378,10 +380,11 @@ class TCPStream:
                     else:
                         payload_form=_content_[_content_.index(b"\r\n\r\n")+4:_content_.index(boundary_last)]
                     print('Having %s byte of file %s was transmitted from %s to %s'%(len(payload_form),filename,_key.split('=>')[0],_key.split('=>')[1]))
-                    file_path = output_path + "/" + filename
+                    
+                    file_path = output_path + "/" + '%s_%s'%(datetime.now().strftime('%s'),filename)
                     fd = open(file_path, "wb")
                     fd.write(payload_form)
                     fd.close()
                     print('the file is written in %s'%file_path)
                 except:
-                    print('failed in process to write file')
+                    print('Have a failure in process effort  processing the file')
