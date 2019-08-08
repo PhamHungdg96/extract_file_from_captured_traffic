@@ -57,7 +57,8 @@ class TCPStateMachine:
         self.flows = set((create_forward_flow(pkt), create_reverse_flow(pkt)))
         self.server = pkt['IP'].dst
         self.client = pkt['IP'].src
-        
+        self.server_port = pkt['TCP'].dport
+        self.client_port = pkt['TCP'].sport
         # 0 is now, 1 is the future Flags
         self.server_state = "LISTEN"
         self.client_state = "SYN_SENT"
@@ -77,12 +78,12 @@ class TCPStateMachine:
         if flow not in self.flows:
             raise Exception("Not a valid packet for this model")
         
-        if pkt['IP'].dst == self.server:
+        if pkt['IP'].dst == self.server and pkt['IP'].src == self.client:
             v =  self.handle_client_pkt(pkt)
             if self.is_fin_wait():
                self.fin_wait_time = pkt.time
             return v
-        else:
+        if pkt['IP'].src == self.server and pkt['IP'].dst == self.client:
             v = self.handle_server_pkt(pkt)
             if self.is_fin_wait():
                self.fin_wait_time = pkt.time
@@ -101,9 +102,11 @@ class TCPStateMachine:
         
     
     def active_close(self):
+        # print(self.client_state,self.server_state)
         return (self.client_state == self.server_state and self.server_state == "CLOSED")
     
     def passive_close(self):
+        # print(self.client_state,self.server_state)
         return (self.client_state == "LAST_ACK" and self.server_state == "CLOSE_WAIT")
     
     def is_established(self):
@@ -156,7 +159,7 @@ class TCPStateMachine:
             if flags & self.build_flags("SA") > 0:
                 self.client_state = "SYN_RCVD"
             
-        elif self.client_state == "SYN_RECVD" and\
+        elif self.client_state == "SYN_RCVD" and\
               flags & self.build_flags("F") > 0:
                 self.client_state = "FIN_WAIT_1"
 

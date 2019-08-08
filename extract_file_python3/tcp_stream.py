@@ -5,6 +5,8 @@ from random import randint
 from tcp_state import TCPStateMachine
 import zlib
 from datetime import datetime
+import gzip
+from io import StringIO
 
 from threading import *
 
@@ -85,9 +87,9 @@ class TCPStream:
     
     def interp_direction(self, dir):
         if dir == 0:
-           return get_client_server_str()
+           return self.get_client_server_str()
         elif dir == 1:
-           return get_server_client_str()
+           return self.get_server_client_str()
         raise Exception("Not a valid direction for the client server")
 
     def get_order_pkts(self, pkts_cnt=0):
@@ -277,14 +279,14 @@ class TCPStream:
     def organize_streams(self):
         data = {}
         seq_nos = {}
-        ipl={}
-        for pkt in self.get_order_pkts():
-            tcpp = pkt[TCP]
+        order_pkts=self.get_order_pkts()
+        for pkt in order_pkts:
+            tcpp = pkt['TCP']
             seq = tcpp.seq
             sport = tcpp.sport
             dport = tcpp.dport
-            s_ip=pkt[IP].src
-            d_ip=pkt[IP].dst
+            s_ip=pkt['IP'].src
+            d_ip=pkt['IP'].dst
 
             keys='%s:%s=>%s:%s'%(s_ip,sport,d_ip,dport)
             if not keys in data:
@@ -303,25 +305,31 @@ class TCPStream:
     def get_stream_data(self):
         seq_nos, data = self.organize_streams()
         streams = {k:bytes() for k in data.keys()}
-
+        print(seq_nos)
         for sport, seqs_payloads in data.items():
             stream = b''
             for seq, payload in seqs_payloads:
                 stream = stream + payload
             streams[sport] = stream
         return streams
+    
+    
     def get_file_data(self,output_path):
         seq_nos, data = self.organize_streams()
         streams = {k:bytes() for k in data.keys()}
-
         for _key, seqs_payloads in data.items():
             stream_data = b''
             _header_exist=False
             for seq, payload in seqs_payloads:
                 stream_data = stream_data + payload
+            print(len(stream_data))
             try:
                 _header = stream_data[stream_data.index(b"HTTP/1."):stream_data.index(b"\r\n\r\n")+2]
+                    
                 if _header:
+                    # with open('payload', "wb") as fo:
+                    #     fo.write(stream_data)
+                    #     fo.close()
                     _header_exist=True
             except:
                 _header_exist=False
@@ -346,7 +354,7 @@ class TCPStream:
                             
     def decompress_form(self,payload,type_compress):
         if type_compress == "gzip":
-            return zlib.decompress(payload, 16+zlib.MAX_WBITS)
+            return gzip.GzipFile(fileobj=StringIO(payload)).read()
         elif type_compress == "deflate":
             return zlib.decompress(payload)
         else:
@@ -374,6 +382,7 @@ class TCPStream:
             if 'Content-Disposition' in header_form_parsed.keys() and \
                 'filename' in header_form_parsed['Content-Disposition']:
                 filename=header_form_parsed['Content-Disposition'].split('filename=')[1].strip('"')
+                print(len(_content_[_content_.index(b"\r\n\r\n")+4:]))
                 try:
                     if it<len(list_content_form)-1:
                         payload_form=_content_[_content_.index(b"\r\n\r\n")+4:]
