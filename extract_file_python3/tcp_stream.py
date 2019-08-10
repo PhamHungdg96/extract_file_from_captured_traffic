@@ -7,6 +7,7 @@ import zlib
 from datetime import datetime
 import gzip
 from io import StringIO
+import os
 
 from threading import *
 
@@ -348,9 +349,10 @@ class TCPStream:
                         if "boundary" in http_header_parsed["Content-Type"]:
                             boundary = http_header_parsed["Content-Type"].split('boundary=')[1]
                             # boundary=('\r\n--%s--\r\n'%boundary).encode()
-                        self.extract_payload_form(boundary,_content_form,output_path, _key)
+                        return self.extract_payload_form(boundary,_content_form,output_path, _key)
                     else: print('Not exist file in flow %s'%_key)
                 else: print('Not exist file in flow %s'%_key)
+        return None
                             
     def decompress_form(self,payload,type_compress):
         if type_compress == "gzip":
@@ -373,6 +375,7 @@ class TCPStream:
         except:
             list_content_form.append(_content_form)
             print('this flow consist only form')
+        list_result=[]
         for it in range(0,len(list_content_form)):
             _content_=list_content_form[it]
             header_form=_content_[:_content_.index(b"\r\n\r\n")+4]
@@ -395,5 +398,8 @@ class TCPStream:
                     fd.write(payload_form)
                     fd.close()
                     print('the file is written in %s'%file_path)
+                    if len(payload_form)>0:
+                        list_result.append((_key.split('=>')[0],_key.split('=>')[1],len(payload_form),filename,file_path))
                 except:
                     print('Have a failure in process effort  processing the file')
+        return list_result
