@@ -8,6 +8,7 @@ from datetime import datetime
 import gzip
 from io import StringIO
 import os
+from data_recognizers.data_recognizer import DataRecognizer
 
 from threading import *
 
@@ -281,6 +282,7 @@ class TCPStream:
         data = {}
         seq_nos = {}
         order_pkts=self.get_order_pkts()
+        # print(order_pkts)
         for pkt in order_pkts:
             tcpp = pkt['TCP']
             seq = tcpp.seq
@@ -306,7 +308,7 @@ class TCPStream:
     def get_stream_data(self):
         seq_nos, data = self.organize_streams()
         streams = {k:bytes() for k in data.keys()}
-        print(seq_nos)
+        # print(seq_nos)
         for sport, seqs_payloads in data.items():
             stream = b''
             for seq, payload in seqs_payloads:
@@ -316,14 +318,14 @@ class TCPStream:
     
     
     def get_file_data(self,output_path):
-        seq_nos, data = self.organize_streams()
-        streams = {k:bytes() for k in data.keys()}
+        _, data = self.organize_streams()
+        # streams = {k:bytes() for k in data.keys()}
         for _key, seqs_payloads in data.items():
             stream_data = b''
             _header_exist=False
-            for seq, payload in seqs_payloads:
+            for _, payload in seqs_payloads:
                 stream_data = stream_data + payload
-            print(len(stream_data))
+            # print(stream_data)
             try:
                 _header = stream_data[stream_data.index(b"HTTP/1."):stream_data.index(b"\r\n\r\n")+2]
                     
@@ -337,20 +339,34 @@ class TCPStream:
                 print('not exist file in flow %s'%_key)
             if _header_exist:
                 _header = stream_data[:stream_data.index(b"\r\n\r\n")+2]
-                http_header_parsed = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", _header.decode("utf8")))
-                if "Content-Type" in http_header_parsed.keys():
+                http_header_parsed_raw = dict(re.findall(r"(?P<name>.*?): (?P<value>.*?)\r\n", _header.decode("utf8")))
+                http_header_parsed = {k.lower(): http_header_parsed_raw[k] for k in http_header_parsed_raw}
+                print(http_header_parsed)
+                if "content-type" in http_header_parsed.keys():
                     _content_form=stream_data[stream_data.index(b"\r\n\r\n")+4:]
-                    if "Content-Encoding" in http_header_parsed.keys():
+                    if "content-encoding" in http_header_parsed.keys():
                         _content_form = self.decompress_form(_content_form,\
-                                        http_header_parsed["Content-Encoding"])
+                                        http_header_parsed["content-encoding"])
                     
-                    if "multipart/form-data" in http_header_parsed["Content-Type"]:
+                    if "multipart/form-data" in http_header_parsed["content-type"]:
                         boundary=''
-                        if "boundary" in http_header_parsed["Content-Type"]:
-                            boundary = http_header_parsed["Content-Type"].split('boundary=')[1]
+                        if "boundary" in http_header_parsed["content-type"]:
+                            boundary = http_header_parsed["content-type"].split('boundary=')[1]
                             # boundary=('\r\n--%s--\r\n'%boundary).encode()
                         return self.extract_payload_form(boundary,_content_form,output_path, _key)
-                    else: print('Not exist file in flow %s'%_key)
+                    else: 
+                        print(len(_content_form))
+                        endFile,occ=DataRecognizer().find_out(_content_form)
+                        filename='.%s'%endFile
+                        if occ is not None:
+                            payload_form=_content_form[occ[0]:]
+                            file_path = output_path + "/" + '%s_%s'%(datetime.now().strftime('%s'),filename)
+                            fd = open(file_path, "wb")
+                            fd.write(payload_form)
+                            fd.close()
+                            print('the file is written in %s'%file_path)
+                            return [(_key.split('=>')[0],_key.split('=>')[1],len(payload_form),filename,file_path)]
+
                 else: print('Not exist file in flow %s'%_key)
         return None
                             

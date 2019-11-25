@@ -11,7 +11,7 @@ import socket, struct, os, array
 
 class Sniff():
     def  __init__(self, interface="lo", offline=None):
-        assert (interface is not None) or (offline is not None)
+        # assert (interface is not None) or (offline is not None)
         if interface is not None:
             offline=None
         self.interface=interface
@@ -19,9 +19,10 @@ class Sniff():
 
         # The raw in (listen) socket is a L2 raw socket that listens
         # for all packets going through a specific interface.
-        self.ins = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
-        self.ins.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 2**30)
-        self.ins.bind((self.interface, ETH_P_ALL))
+        if interface is not None:
+            self.ins = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
+            self.ins.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 2**30)
+            self.ins.bind((self.interface, ETH_P_ALL))
 
         self.streams={}
         self.fwd_flows = set()
@@ -75,5 +76,6 @@ class Sniff():
             pkts=rdpcap(self.offline)
             for pkt in pkts:
                 self.process_pkt(pkt)
-_sniff = Sniff('wlp3s0')
+# _sniff = Sniff(interface=None,offline='jpg_png.pcap')
+_sniff = Sniff(interface=None,offline='get.pcap')
 _sniff.recv()

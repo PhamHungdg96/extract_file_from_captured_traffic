@@ -78,7 +78,7 @@ def main(outputdir, conn=None):
     #   promiscious mode (1 for true)
     #   timeout (in milliseconds)
     '''
-    cap = pcapy.open_live(dev , 65536 , 1 , 0)
+    cap = pcapy.open_live(dev , 65536 , True , 10)
 
     #start sniffing packets
     while(1) :
@@ -120,7 +120,8 @@ if __name__=='__main__':
                                         file_path text
                                     ); """
     outputdir=extract_file()
-    conn=save.create_connection('DBExtractFile.db')
-    with conn:
-        save.create_table(conn,sql_create_ExtractFile_table)
-        main(outputdir,conn)
+    main(outputdir)
+    # conn=save.create_connection('DBExtractFile.db')
+    # with conn:
+    #     save.create_table(conn,sql_create_ExtractFile_table)
+    #     main(outputdir,conn)
